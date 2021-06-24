@@ -25,3 +25,17 @@ data_root = '/Dataset'   # '../Dataset/Kaggle265'
 target_size = (224, 224)
 target_root = '/Targetset'   # '../Dataset/Kaggle265'
 
+
+# 警告：伪代码施工现场！
+
+model_ft = models.resnet18(pretrained=True)
+# model 替换为 swin - Transformer
+
+trans_D = model_ft(data)
+trans_T = model_ft(target)
+
+outputs = torch.nn.functional.conv2d(trans_D, trans_T)
+pred_ = torch.nn.functional.argsoftmax(outputs)
+label = ()
+
+loss = torch.nn.MSELoss(pred_, label)
