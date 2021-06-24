@@ -59,7 +59,7 @@ trans_D = model_ft(data)
 trans_T = model_ft(target)
 
 outputs = torch.nn.functional.conv2d(trans_D, trans_T)
-pred_ = torch.nn.functional.argsoftmax(outputs)
+pred_ = torch.softmax(outputs) * [0, 1, 2, 3, ...]
 label = ()
 
 loss = torch.nn.MSELoss(pred_, label)
