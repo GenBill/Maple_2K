@@ -25,10 +25,34 @@ data_root = '/Dataset'   # '../Dataset/Kaggle265'
 target_size = (224, 224)
 target_root = '/Targetset'   # '../Dataset/Kaggle265'
 
+# Initiate dataset and dataset transform
+data_pre_transforms = {
+    'train': transforms.Compose([
+        transforms.Resize(image_size),
+        transforms.RandomHorizontalFlip(),
+    ]),
+    'test': transforms.Compose([
+        transforms.Resize(image_size),
+    ]),
+}
+data_post_transforms = {
+    'train': transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.6086, 0.4920, 0.4619], std=[0.2577, 0.2381, 0.2408])
+    ]),
+    'test': transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.6086, 0.4920, 0.4619], std=[0.2577, 0.2381, 0.2408])
+    ]),
+}
+
+loader = DJloader(patch_dim, gap, jitter, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers)
+
 
 # 警告：伪代码施工现场！
 
-model_ft = models.resnet18(pretrained=True)
+model_all = models.resnet18(pretrained=True)
+model_ft = nn.Sequential(*(list(model_all.children())[:-1]))
 # model 替换为 swin - Transformer
 
 trans_D = model_ft(data)
