@@ -217,3 +217,24 @@ class SpatialSoftmax(nn.Module):
         # feature_keypoints = expected_xy.view(-1, self.channel * 2)
 
         # return feature_keypoints
+
+def soft_argmax(voxels):
+	"""
+	Arguments: voxel patch in shape (batch_size, channel, H, W)
+	Return: 2D coordinates in shape (batch_size, channel, 2)
+	"""
+	assert voxels.dim()==5
+	# alpha is here to make the largest element really big, so it
+	# would become very close to 1 after softmax
+	alpha = 1000.0 
+	N,C,H,W = voxels.shape
+	soft_max = nn.functional.softmax(voxels.view(N,C,-1)*alpha,dim=2)
+	soft_max = soft_max.view(voxels.shape)
+	indices_kernel = torch.arange(start=0,end=H*W).unsqueeze(0)
+	indices_kernel = indices_kernel.view((H,W))
+	conv = soft_max*indices_kernel
+	indices = conv.sum(2).sum(2).sum(2)
+	y = indices%W
+	x = (indices/W).floor()%H
+	coords = torch.stack([x,y],dim=2)
+	return coords

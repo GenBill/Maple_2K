@@ -76,8 +76,8 @@ for epoch in range(num_epoch):
         print(trans_D.shape)
 
         outputs = F.conv2d(input=trans_D, weight=trans_T)
-        pred_x, pred_y = layer_soft(outputs)
+        pred_ = soft_argmax(outputs)
 
-        loss = criterion(pred_x, label_x) + criterion(pred_y, label_y)
+        loss = criterion(pred_[:,:,0], label_x) + criterion(pred_[:,:,1], label_y)
         optimizer.zero_grad()
         loss.backward()
