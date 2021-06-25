@@ -17,16 +17,13 @@ warnings.filterwarnings('ignore')
 
 class Selfset(Dataset):
 
-    def __init__(self, split, root_paths, patch_dim, gap, jitter, preTransform=None, postTransform=None):
+    def __init__(self, split, root_paths, patch_dim, jitter, preTransform=None, postTransform=None):
         self.root_paths = root_paths
         self.image_paths = root_paths + '/' + split
 
         self.patch_dim = patch_dim
-        self.gap = gap
         self.jitter = jitter
-
         self.margin = math.ceil(self.patch_dim/2.0) + self.jitter
-        self.min_width = 2*self.patch_dim + 2*self.jitter + 2*self.gap
 
         self.preTransform = preTransform
         self.postTransform = postTransform
@@ -48,60 +45,31 @@ class Selfset(Dataset):
             pil_patch = pil_patch.resize(original_size) 
             np.copyto(image, np.array(pil_patch))
 
-        # randomly drop all but one color channel
-        # 看起来就是毫无意义的增加学习难度
-        # 垃圾玩意，删了
-        # chan_to_keep = random.randint(0, 2)
-        # for i in range(0, 3):
-        #     if i != chan_to_keep:
-        #         image[:,:,i] = np.random.randint(0, 255, (self.patch_dim, self.patch_dim), dtype=np.uint8)
-
     def __getitem__(self, index):
-        # [y, x, chan], dtype=uint8, top_left is (0,0)
-        patch_loc_arr = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)]
-        # image_index = int(math.floor((len(self.dataset) * random.random())))
-        # pil_image = Image.open(self.image_paths[image_index]).convert('RGB')
-        # pil_image = datasets.ImageFolder(self.image_paths, self.preTransform)
         img_PIL, _ = self.dataset[index]
         image = np.array(img_PIL)
         # If image is too small, try another image
         if image.shape[1] <= self.min_width or image.shape[0] <= self.min_width:
             return self.__getitem__(index)
-        
-        patch_direction_label = int(math.floor((8 * random.random())))
-        patch_jitter_y = int(math.floor((self.jitter * 2 * random.random()))) - self.jitter
-        patch_jitter_x = int(math.floor((self.jitter * 2 * random.random()))) - self.jitter
-                
-        while True:
-                
-            uniform_patch_x_coord = int(math.floor((image.shape[0] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
-            uniform_patch_y_coord = int(math.floor((image.shape[1] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
-            random_patch_y_coord = uniform_patch_x_coord + patch_loc_arr[patch_direction_label][0] * (self.patch_dim + self.gap) + patch_jitter_y
-            random_patch_x_coord = uniform_patch_y_coord + patch_loc_arr[patch_direction_label][1] * (self.patch_dim + self.gap) + patch_jitter_x
 
-            if random_patch_y_coord>=0 and random_patch_x_coord>=0 and random_patch_y_coord+self.patch_dim<image.shape[0] and random_patch_x_coord+self.patch_dim<image.shape[1]:
-                break
+        uniform_patch_x_coord = int(math.floor((image.shape[0] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
+        uniform_patch_y_coord = int(math.floor((image.shape[1] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
         
         uniform_patch = image[
             uniform_patch_x_coord : uniform_patch_x_coord + self.patch_dim, 
             uniform_patch_y_coord : uniform_patch_y_coord + self.patch_dim
         ]                
-        random_patch = image[
-            random_patch_y_coord : random_patch_y_coord + self.patch_dim, 
-            random_patch_x_coord : random_patch_x_coord + self.patch_dim
-        ]
-        # 非必要模块：随机图片抖动
-        # self.prep_patch(uniform_patch)
-        # self.prep_patch(random_patch)
+        # 必要模块：随机图片抖动
+        self.prep_patch(uniform_patch)
+
         if self.preTransform:
             uniform_patch = self.postTransform(uniform_patch)
-            random_patch = self.postTransform(random_patch)
+            origin_patch = self.postTransform(image)
         else:
             uniform_patch = transforms.ToTensor(uniform_patch)
-            random_patch = transforms.ToTensor(random_patch)
+            origin_patch = transforms.ToTensor(image)
 
-        patch_direction_label = np.array(patch_direction_label).astype(np.int64)
-        return uniform_patch, random_patch, patch_direction_label
+        return uniform_patch, origin_patch, uniform_patch_x_coord, uniform_patch_y_coord
 
 # General Code for supervised train
 def patchtrain(model, fc_layer, dataloaders, criterion, optimizer, scheduler, 
@@ -189,10 +157,10 @@ def patchtrain(model, fc_layer, dataloaders, criterion, optimizer, scheduler,
     fc_layer.load_state_dict(best_fc_wts)
     return model, fc_layer
 
-def patchloader(patch_dim, gap, jitter, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers):
+def aug_loader(patch_dim, jitter, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers):
 
     image_datasets = {
-        x: Selfset(x, data_root, patch_dim, gap, jitter, 
+        x: Selfset(x, data_root, patch_dim, jitter, 
         preTransform = data_pre_transforms[x], postTransform=data_post_transforms[x])
         for x in ['train', 'test']
     }
