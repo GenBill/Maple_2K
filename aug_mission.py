@@ -4,22 +4,33 @@ import math
 import random
 
 import torch
+import torch.nn as nn
 import torch.nn.parallel
+import torch.nn.functional as F
+from torch.nn.parameter import Parameter
 from torchvision import datasets, models
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 
+import matplotlib.pyplot as plt
+
+import os
 import time
 import copy
 from PIL import Image
 import warnings
 warnings.filterwarnings('ignore')
 
+def imshow(img):
+    npimg = img.detach().numpy()
+    plt.imshow(npimg)
+    # plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.show()
+
 class Selfset(Dataset):
 
-    def __init__(self, split, root_paths, patch_dim, jitter, preTransform=None, postTransform=None):
-        self.root_paths = root_paths
-        self.image_paths = root_paths + '/' + split
+    def __init__(self, path_dir, patch_dim, jitter, preTransform=None, postTransform=None):
+        self.path_dir = path_dir
 
         self.patch_dim = patch_dim
         self.jitter = jitter
@@ -27,7 +38,8 @@ class Selfset(Dataset):
 
         self.preTransform = preTransform
         self.postTransform = postTransform
-        self.dataset = datasets.ImageFolder(self.image_paths, self.preTransform)
+        self.dataset = os.listdir(self.path_dir)
+        # self.dataset = datasets.ImageFolder(self.image_paths, self.preTransform)
 
     def __len__(self):
         return len(self.dataset)
@@ -46,30 +58,34 @@ class Selfset(Dataset):
             np.copyto(image, np.array(pil_patch))
 
     def __getitem__(self, index):
-        img_PIL, _ = self.dataset[index]
-        image = np.array(img_PIL)
-        # If image is too small, try another image
-        if image.shape[1] <= self.min_width or image.shape[0] <= self.min_width:
-            return self.__getitem__(index)
+        image_index = self.dataset[index]
+        image_path = os.path.join(self.path_dir, image_index)       # 获取图像的路径或目录
+        image = Image.open(image_path)         # .convert('RGB')    # 读取图像
+        image = self.preTransform(image)
+        # print(image.size)
 
-        uniform_patch_x_coord = int(math.floor((image.shape[0] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
-        uniform_patch_y_coord = int(math.floor((image.shape[1] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
-        
-        uniform_patch = image[
-            uniform_patch_x_coord : uniform_patch_x_coord + self.patch_dim, 
-            uniform_patch_y_coord : uniform_patch_y_coord + self.patch_dim
-        ]                
+        uniform_patch_x_coord = int(math.floor((image.size[0] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
+        uniform_patch_y_coord = int(math.floor((image.size[1] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
+                    
         # 必要模块：随机图片抖动
-        self.prep_patch(uniform_patch)
+        # self.prep_patch(image)
 
         if self.preTransform:
-            uniform_patch = self.postTransform(uniform_patch)
+            uniform_patch = self.postTransform(image)[0,
+                uniform_patch_x_coord : uniform_patch_x_coord + self.patch_dim, 
+                uniform_patch_y_coord : uniform_patch_y_coord + self.patch_dim
+            ]
             origin_patch = self.postTransform(image)
         else:
-            uniform_patch = transforms.ToTensor(uniform_patch)
+            uniform_patch = transforms.ToTensor(image)[0,
+                uniform_patch_x_coord : uniform_patch_x_coord + self.patch_dim, 
+                uniform_patch_y_coord : uniform_patch_y_coord + self.patch_dim
+            ]
             origin_patch = transforms.ToTensor(image)
 
-        return uniform_patch, origin_patch, uniform_patch_x_coord, uniform_patch_y_coord
+        # print(uniform_patch.shape)
+        # print(origin_patch.shape)
+        return uniform_patch.unsqueeze(0), origin_patch, uniform_patch_x_coord + self.patch_dim//2, uniform_patch_y_coord + self.patch_dim//2
 
 # General Code for supervised train
 def patchtrain(model, fc_layer, dataloaders, criterion, optimizer, scheduler, 
@@ -158,18 +174,72 @@ def patchtrain(model, fc_layer, dataloaders, criterion, optimizer, scheduler,
     return model, fc_layer
 
 def aug_loader(patch_dim, jitter, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers):
-
-    image_datasets = {
-        x: Selfset(x, data_root, patch_dim, jitter, 
-        preTransform = data_pre_transforms[x], postTransform=data_post_transforms[x])
-        for x in ['train', 'test']
-    }
+    image_datasets = Selfset(data_root, patch_dim, jitter, 
+        preTransform = data_pre_transforms, postTransform=data_post_transforms)
     assert image_datasets
-    dataloaders = {
-        x: torch.utils.data.DataLoader(
-            image_datasets[x], batch_size=batch_size,
+    dataloaders = torch.utils.data.DataLoader(
+            image_datasets, batch_size=batch_size,
             pin_memory=True, shuffle=True, num_workers=num_workers
-        ) for x in ['train', 'test']}
-    # dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'test']}
+        )
     return dataloaders
 
+class MyNet(nn.Module):
+    def __init__(self):
+        #使用super()方法调用基类的构造器，即nn.Module.__init__(self)
+        super(MyNet,self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=2)
+        self.conv2 = nn.Conv2d(16, 16, 5, padding=4)
+        self.conv3 = nn.Conv2d(16, 16, 5, padding=4)
+        self.conv4 = nn.Conv2d(16, 1, 5, padding=4)
+
+    def forward(self,x):
+        # print(x.shape)
+        # x = F.max_pool2d(F.relu(self.conv1(x)),2)
+        # x = F.max_pool2d(F.relu(self.conv2(x)),2)
+        x = F.leaky_relu(self.conv1(x))
+        x = F.leaky_relu(self.conv2(x))
+        x = F.leaky_relu(self.conv3(x))
+        x = F.leaky_relu(self.conv4(x))
+        return x
+
+class SpatialSoftmax(nn.Module):
+    def __init__(self, height, width, channel, device, temperature=None, data_format='NCHW'):
+        super(SpatialSoftmax, self).__init__()
+        self.data_format = data_format
+        self.height = height
+        self.width = width
+        self.channel = channel
+        self.device=device
+        if temperature:
+            self.temperature = Parameter(torch.ones(1) * temperature)
+        else:
+            self.temperature = 1.
+
+        pos_x, pos_y = np.meshgrid(
+            np.linspace(-1., 1., self.height),
+            np.linspace(-1., 1., self.width)
+        )
+        pos_x = torch.from_numpy(pos_x.reshape(self.height * self.width)).float()
+        pos_y = torch.from_numpy(pos_y.reshape(self.height * self.width)).float()
+        self.register_buffer('pos_x', pos_x)
+        self.register_buffer('pos_y', pos_y)
+
+    def forward(self, feature):
+        # Output:
+        #   (N, C*2) x_0 y_0 ...
+        if self.data_format == 'NHWC':
+            feature = feature.transpose(1, 3).tranpose(2, 3).view(-1, self.height * self.width)
+        else:
+            feature = feature.view(-1, self.height * self.width)
+
+        softmax_attention = F.softmax(feature, dim=-1)
+        self.pos_x=self.pos_x.to(self.device)
+        self.pos_y= self.pos_y.to(self.device)
+        softmax_attention=softmax_attention.to(self.device)
+        expected_x = torch.sum(self.pos_x * softmax_attention, dim=1, keepdim=True)
+        expected_y = torch.sum(self.pos_y * softmax_attention, dim=1, keepdim=True)
+        return expected_x, expected_y
+        # expected_xy = torch.cat([expected_x, expected_y], 1)
+        # feature_keypoints = expected_xy.view(-1, self.channel * 2)
+
+        # return feature_keypoints
