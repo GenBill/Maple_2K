@@ -45,7 +45,7 @@ batch_size = 16
 num_workers = 0
 num_epoch = 1
 
-loader = aug_loader(patch_dim, jitter, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers)
+loader = aug_loader(patch_dim, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers)
 
 # 警告：伪代码施工现场！
 
@@ -53,7 +53,7 @@ loader = aug_loader(patch_dim, jitter, data_root, data_pre_transforms, data_post
 # model_ft = nn.Sequential(*(list(model_all.children())[:-1])).to(device)
 # print(model_ft)
 model_ft = MyNet().to(device)
-layer_soft = SpatialSoftmax(224, 224, 1, device=device).to(device)
+layer_soft = SpatialSoftmax(1024, 1024, device=device)
 # model 替换为 swin - Transformer
 
 optimizer = optim.SGD([
@@ -71,11 +71,11 @@ for epoch in range(num_epoch):
         label_y = label_y.to(device)
         
         trans_T = model_ft(target)
-        # imshow(trans_T[0,0])
         trans_D = model_ft(data)
-        # imshow(trans_D[0,0])
+        print(trans_T.shape)
+        print(trans_D.shape)
 
-        outputs = F.conv2d(trans_D, trans_T)
+        outputs = F.conv2d(input=trans_D, weight=trans_T)
         pred_x, pred_y = layer_soft(outputs)
 
         loss = criterion(pred_x, label_x) + criterion(pred_y, label_y)

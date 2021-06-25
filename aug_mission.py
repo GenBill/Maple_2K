@@ -29,12 +29,9 @@ def imshow(img):
 
 class Selfset(Dataset):
 
-    def __init__(self, path_dir, patch_dim, jitter, preTransform=None, postTransform=None):
+    def __init__(self, path_dir, patch_dim, preTransform=None, postTransform=None):
         self.path_dir = path_dir
-
         self.patch_dim = patch_dim
-        self.jitter = jitter
-        self.margin = math.ceil(self.patch_dim/2.0) + self.jitter
 
         self.preTransform = preTransform
         self.postTransform = postTransform
@@ -43,31 +40,17 @@ class Selfset(Dataset):
 
     def __len__(self):
         return len(self.dataset)
-    
-    def prep_patch(self, image):
-
-        # for some patches, randomly downsample to as little as 100 total pixels
-        # 说是要下采样，结果放大后又缩小？迷惑行为
-        # 可能可以添加抖动
-        if(random.random() < .33):
-            pil_patch = Image.fromarray(image)
-            original_size = pil_patch.size
-            randpix = int(math.sqrt(random.random() * (95 * 95 - 10 * 10) + 10 * 10))
-            pil_patch = pil_patch.resize((randpix, randpix)) 
-            pil_patch = pil_patch.resize(original_size) 
-            np.copyto(image, np.array(pil_patch))
 
     def __getitem__(self, index):
         image_index = self.dataset[index]
         image_path = os.path.join(self.path_dir, image_index)       # 获取图像的路径或目录
         image = Image.open(image_path)         # .convert('RGB')    # 读取图像
         image = self.preTransform(image)
-        # print(image.size)
 
-        uniform_patch_x_coord = int(math.floor((image.size[0] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
-        uniform_patch_y_coord = int(math.floor((image.size[1] - self.margin*2) * random.random())) + self.margin - int(round(self.patch_dim/2.0))
+        uniform_patch_x_coord = int(math.floor((image.size[0] - self.patch_dim) * random.random()))
+        uniform_patch_y_coord = int(math.floor((image.size[1] - self.patch_dim) * random.random()))
                     
-        # 必要模块：随机图片抖动
+        # 必要模块：数据增强
         # self.prep_patch(image)
 
         if self.preTransform:
@@ -83,8 +66,6 @@ class Selfset(Dataset):
             ]
             origin_patch = transforms.ToTensor(image)
 
-        # print(uniform_patch.shape)
-        # print(origin_patch.shape)
         return uniform_patch.unsqueeze(0), origin_patch, uniform_patch_x_coord + self.patch_dim//2, uniform_patch_y_coord + self.patch_dim//2
 
 # General Code for supervised train
@@ -173,8 +154,8 @@ def patchtrain(model, fc_layer, dataloaders, criterion, optimizer, scheduler,
     fc_layer.load_state_dict(best_fc_wts)
     return model, fc_layer
 
-def aug_loader(patch_dim, jitter, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers):
-    image_datasets = Selfset(data_root, patch_dim, jitter, 
+def aug_loader(patch_dim, data_root, data_pre_transforms, data_post_transforms, batch_size, num_workers):
+    image_datasets = Selfset(data_root, patch_dim, 
         preTransform = data_pre_transforms, postTransform=data_post_transforms)
     assert image_datasets
     dataloaders = torch.utils.data.DataLoader(
@@ -187,10 +168,10 @@ class MyNet(nn.Module):
     def __init__(self):
         #使用super()方法调用基类的构造器，即nn.Module.__init__(self)
         super(MyNet,self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=2)
-        self.conv2 = nn.Conv2d(16, 16, 5, padding=4)
-        self.conv3 = nn.Conv2d(16, 16, 5, padding=4)
-        self.conv4 = nn.Conv2d(16, 1, 5, padding=4)
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)
+        self.conv2 = nn.Conv2d(16, 16, 5, padding=2)
+        self.conv3 = nn.Conv2d(16, 16, 5, padding=2)
+        self.conv4 = nn.Conv2d(16, 1, 5, padding=2)
 
     def forward(self,x):
         # print(x.shape)
@@ -203,21 +184,19 @@ class MyNet(nn.Module):
         return x
 
 class SpatialSoftmax(nn.Module):
-    def __init__(self, height, width, channel, device, temperature=None, data_format='NCHW'):
+    def __init__(self, height, width, device, temperature=None):
         super(SpatialSoftmax, self).__init__()
-        self.data_format = data_format
         self.height = height
         self.width = width
-        self.channel = channel
-        self.device=device
+        self.device = device
         if temperature:
             self.temperature = Parameter(torch.ones(1) * temperature)
         else:
             self.temperature = 1.
 
         pos_x, pos_y = np.meshgrid(
-            np.linspace(-1., 1., self.height),
-            np.linspace(-1., 1., self.width)
+            np.linspace(0.0, self.height),
+            np.linspace(0.0, self.width)
         )
         pos_x = torch.from_numpy(pos_x.reshape(self.height * self.width)).float()
         pos_y = torch.from_numpy(pos_y.reshape(self.height * self.width)).float()
@@ -226,16 +205,11 @@ class SpatialSoftmax(nn.Module):
 
     def forward(self, feature):
         # Output:
-        #   (N, C*2) x_0 y_0 ...
-        if self.data_format == 'NHWC':
-            feature = feature.transpose(1, 3).tranpose(2, 3).view(-1, self.height * self.width)
-        else:
-            feature = feature.view(-1, self.height * self.width)
-
         softmax_attention = F.softmax(feature, dim=-1)
-        self.pos_x=self.pos_x.to(self.device)
-        self.pos_y= self.pos_y.to(self.device)
-        softmax_attention=softmax_attention.to(self.device)
+
+        self.pos_x = self.pos_x.to(self.device)
+        self.pos_y = self.pos_y.to(self.device)
+        softmax_attention = softmax_attention.to(self.device)
         expected_x = torch.sum(self.pos_x * softmax_attention, dim=1, keepdim=True)
         expected_y = torch.sum(self.pos_y * softmax_attention, dim=1, keepdim=True)
         return expected_x, expected_y
