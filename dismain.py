@@ -35,7 +35,7 @@ loader = aim_loader(data_root, target_root, num_workers)
 model_ft = models.resnet50(pretrained=True).to(device)
 # criterion = torch.nn.MSELoss()
 criterion = torch.nn.L1Loss()
-step = 4
+step = 1    # 8
 
 model_ft.eval()
 with torch.no_grad():
