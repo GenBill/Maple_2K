@@ -22,7 +22,7 @@ from PIL import Image
 plt.ion()  # interactive mode
 warnings.filterwarnings('ignore')
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'    # opt.cuda
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'    # opt.cuda
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")     # "cpu" #
 
 datawriter = SummaryWriter()
@@ -33,6 +33,8 @@ num_workers = 0
 
 loader = aim_loader(data_root, target_root, num_workers)
 model_ft = models.resnet50(pretrained=True).to(device)
+print(model_ft)
+'''
 # criterion = torch.nn.MSELoss()
 criterion = torch.nn.L1Loss()
 step = 16
@@ -80,3 +82,4 @@ with torch.no_grad():
         print('Pos = ({}, {})'.format(x, y))
         print('Loss = {}'.format(min_loss))
 datawriter.close()
+'''

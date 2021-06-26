@@ -34,9 +34,14 @@ step = 8
 halfstep = int(step*3/2)
 
 loader = aim_loader(data_root, target_root, num_workers)
-model_ft = models.resnet50(pretrained=True).to(device)
-# criterion = torch.nn.MSELoss()
-criterion = torch.nn.L1Loss()
+model_all = models.resnet50(pretrained=True)
+model_ft = nn.Sequential(
+    *(list(model_all.children())[:-1]),
+    nn.Flatten()
+).to(device)
+
+criterion = torch.nn.MSELoss()
+# criterion = torch.nn.L1Loss()
 
 model_ft.eval()
 with torch.no_grad():
@@ -46,7 +51,7 @@ with torch.no_grad():
         data_size = data_size.item()
         target_size = target_size.item()
 
-        min_loss = 1024.
+        min_loss = 1e4
         min_i, min_j = -1, -1
 
         for i in tqdm(range(0, data_size-target_size, step)):
@@ -62,14 +67,15 @@ with torch.no_grad():
 
             head_i = max(0, min_i-halfstep)
             head_j = max(0, min_j-halfstep)
-            tail_i = min(min_i+halfstep, data_size)
-            tail_j = min(min_j+halfstep, data_size)
+            tail_i = min(min_i+halfstep, data_size-target_size)
+            tail_j = min(min_j+halfstep, data_size-target_size)
         
             for i in range(head_i, tail_i):
                 for j in range(head_j, tail_j):
                     trans_T = model_ft(target)
                     trans_D = model_ft(data[:,:,i:i+target_size,j:j+target_size])
                     loss = criterion(trans_T, trans_D).item()
+                    # loss = torch.mean(torch.square(criterion(trans_T, trans_D))).item()
                     if min_loss>loss:
                         min_i, min_j = i, j
                         min_loss = loss
