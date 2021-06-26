@@ -30,16 +30,17 @@ data_root = './Dataset'   # '../Dataset/Kaggle265'
 target_root = './Targetset'   # '../Dataset/Kaggle265'
 
 num_workers = 0
+step = 8
+halfstep = int(step*3/2)
 
 loader = aim_loader(data_root, target_root, num_workers)
 model_ft = models.resnet50(pretrained=True).to(device)
 # criterion = torch.nn.MSELoss()
 criterion = torch.nn.L1Loss()
-step = 1    # 8
 
 model_ft.eval()
 with torch.no_grad():
-    for num_iter, (data, target, data_size, target_size) in enumerate(tqdm(loader)):
+    for num_iter, (data, target, data_size, target_size) in enumerate(loader):
         target = target.to(device)
         data = data.to(device)
         data_size = data_size.item()
@@ -48,7 +49,7 @@ with torch.no_grad():
         min_loss = 1024.
         min_i, min_j = -1, -1
 
-        for i in range(0, data_size-target_size, step):
+        for i in tqdm(range(0, data_size-target_size, step)):
             for j in range(0, data_size-target_size, step):
                 trans_T = model_ft(target)
                 trans_D = model_ft(data[:,:,i:i+target_size,j:j+target_size])
@@ -59,10 +60,10 @@ with torch.no_grad():
         
         if step>1:
 
-            head_i = max(0, min_i-step)
-            head_j = max(0, min_j-step)
-            tail_i = min(min_i+step, data_size)
-            tail_j = min(min_j+step, data_size)
+            head_i = max(0, min_i-halfstep)
+            head_j = max(0, min_j-halfstep)
+            tail_i = min(min_i+halfstep, data_size)
+            tail_j = min(min_j+halfstep, data_size)
         
             for i in range(head_i, tail_i):
                 for j in range(head_j, tail_j):
