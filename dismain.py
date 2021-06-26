@@ -22,10 +22,10 @@ from PIL import Image
 plt.ion()  # interactive mode
 warnings.filterwarnings('ignore')
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'    # opt.cuda
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'    # opt.cuda
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")     # "cpu" #
 
-datawriter = SummaryWriter()
+datawriter = SummaryWriter('./runs/vgg_16')
 data_root = './Dataset'   # '../Dataset/Kaggle265'
 target_root = './Targetset'   # '../Dataset/Kaggle265'
 
@@ -35,9 +35,11 @@ halfstep = int(step*3/2)
 
 loader = aim_loader(data_root, target_root, num_workers)
 # model_all = models.resnet50(pretrained=True)
-model_all = models.resnet152(pretrained=True)
+# model_all = models.resnet18(pretrained=True)
+# model_all = models.vgg16(pretrained=True)
+model_all = models.vgg16(pretrained=True)
 model_ft = nn.Sequential(
-    *(list(model_all.children())[:-1]),
+    *(list(model_all.children())[:-2]),
     nn.Flatten()
 ).to(device)
 
