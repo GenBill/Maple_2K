@@ -34,7 +34,8 @@ step = 8
 halfstep = int(step*3/2)
 
 loader = aim_loader(data_root, target_root, num_workers)
-model_all = models.resnet50(pretrained=True)
+# model_all = models.resnet50(pretrained=True)
+model_all = models.resnet152(pretrained=True)
 model_ft = nn.Sequential(
     *(list(model_all.children())[:-1]),
     nn.Flatten()
