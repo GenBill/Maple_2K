@@ -63,6 +63,7 @@ class Aimset(Dataset):
         # temp = cv2.medianBlur(np.array(target), 3)
         # # temp = cv2.fastNlMeansDenoisingColored(temp, None, 10,10,7,21)
         # target = Image.fromarray(temp)
+
         data = transforms.CenterCrop(data_size)(data)
         data = transforms.ToTensor()(data)
         target = transforms.CenterCrop(target_size)(target)

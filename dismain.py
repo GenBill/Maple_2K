@@ -25,7 +25,7 @@ warnings.filterwarnings('ignore')
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'    # opt.cuda
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")     # "cpu" #
 
-datawriter = SummaryWriter('./runs/vgg_16')
+datawriter = SummaryWriter('./runs/res34')
 data_root = './Dataset'   # '../Dataset/Kaggle265'
 target_root = './Targetset'   # '../Dataset/Kaggle265'
 
@@ -34,10 +34,7 @@ step = 8
 halfstep = int(step*3/2)
 
 loader = aim_loader(data_root, target_root, num_workers)
-# model_all = models.resnet50(pretrained=True)
-# model_all = models.resnet18(pretrained=True)
-# model_all = models.vgg16(pretrained=True)
-model_all = models.vgg16(pretrained=True)
+model_all = models.resnet34(pretrained=True)
 model_ft = nn.Sequential(
     *(list(model_all.children())[:-2]),
     nn.Flatten()
@@ -81,7 +78,7 @@ with torch.no_grad():
                     # loss = torch.mean(torch.square(criterion(trans_T, trans_D))).item()
                     if min_loss>loss:
                         min_i, min_j = i, j
-                        min_loss = loss
+                        min_loss = loss    
 
         data[0,:,min_i:min_i+target_size,min_j:min_j+target_size] = target[0,:,:,:]
         x, y = get_position(min_i, min_j, data_size, target_size)
@@ -93,4 +90,6 @@ with torch.no_grad():
         print('Iter : {}'.format(num_iter))
         print('Pos = ({}, {})'.format(x, y))
         print('Loss = {}'.format(min_loss))
+
 datawriter.close()
+
