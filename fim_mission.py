@@ -32,7 +32,7 @@ def get_position(min_i, min_j, data_size, target_size):
     y = min_j + (target_size - data_size)//2
     return x, y
 
-class Aimset(Dataset):
+class Fimset(Dataset):
 
     def __init__(self, data_dir, target_dir):
         self.data_dir = data_dir
@@ -65,7 +65,7 @@ class Aimset(Dataset):
         return data, target, data_size, target_size
 
 def aim_loader(data_root, target_root, num_workers):
-    image_datasets = Aimset(data_root, target_root) 
+    image_datasets = Fimset(data_root, target_root) 
     assert image_datasets
     dataloaders = torch.utils.data.DataLoader(
             image_datasets, batch_size=1,
