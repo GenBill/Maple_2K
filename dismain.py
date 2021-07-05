@@ -26,6 +26,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'    # opt.cuda
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")     # "cpu" #
 
 datawriter = SummaryWriter('./runs/res18')
+file0 = open("./MatchResult.txt", "w+")
+file1 = open("./MatchLoss.txt", "w+")
+
 data_root = './Dataset'   # '../Dataset/Kaggle265'
 target_root = './Targetset'   # '../Dataset/Kaggle265'
 
@@ -81,15 +84,23 @@ with torch.no_grad():
                         min_loss = loss    
 
         data[0,:,min_i:min_i+target_size,min_j:min_j+target_size] = target[0,:,:,:]
-        x, y = get_position(min_i, min_j, data_size, target_size)
+        # data[0,:,min_i:min_i+target_size,0:target_size] = target[0,:,:,:]
+
+        # x, y = get_position(min_i, min_j, data_size, target_size)
+        dx, dy = min_j, min_i
         
         datawriter.add_image('new_img', data[0,:,:,:], num_iter)
         datawriter.add_scalar('img_loss', min_loss, num_iter)
-        datawriter.add_scalars('position', {'x': x, 'y': y}, num_iter)
-        
+        datawriter.add_scalars('position', {'dx': dx, 'dy': dy}, num_iter)
+        file0.write("{}\t{}\n".format(dx, dy))
+        file1.write("{}\t{}\t{:.6f}\n".format(dx, dy, min_loss))
+        file0.flush()
+        file1.flush()
+
         print('Iter : {}'.format(num_iter))
-        print('Pos = ({}, {})'.format(x, y))
+        print('Pos = ({}, {})'.format(dx, dy))
         print('Loss = {}'.format(min_loss))
 
 datawriter.close()
-
+file0.close()
+file1.close()
